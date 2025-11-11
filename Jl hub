@@ -1,0 +1,150 @@
+-- AutoFarm-Simulado (LocalScript)
+-- Uso: Colocar em StarterPlayerScripts no Roblox Studio (Play Solo).
+-- Observação: ESTE SCRIPT É APENAS PARA ESTUDO/TESTES LOCAIS. Não chama Remotes nem faz exploits.
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local CollectionService = game:GetService("CollectionService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoidRoot = character:WaitForChild("HumanoidRootPart")
+
+-- ======= Configurações =======
+local SEARCH_RADIUS = 70          -- raio para procurar NPCs
+local ATTACK_INTERVAL = 0.8       -- tempo entre ataques (segundos)
+local MOVE_SPEED = 16             -- velocidade aproximada de movimento simulado
+local NPC_TAG = "MockNPC"         -- tag que define NPCs de teste (use CollectionService:AddTag)
+-- ==============================
+
+-- Estado do bot
+local enabled = false
+local lastAttack = 0
+
+-- GUI simples com botão ligar/desligar
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AutoFarmSimGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame", screenGui)
+frame.Size = UDim2.new(0, 220, 0, 90)
+frame.Position = UDim2.new(0.02, 0, 0.75, 0)
+frame.BackgroundTransparency = 0.25
+frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+frame.BorderSizePixel = 0
+frame.AnchorPoint = Vector2.new(0,0)
+
+local title = Instance.new("TextLabel", frame)
+title.Size = UDim2.new(1, -10, 0, 30)
+title.Position = UDim2.new(0, 5, 0, 5)
+title.BackgroundTransparency = 1
+title.Text = "AutoFarm (Simulado)"
+title.TextColor3 = Color3.new(1,1,1)
+title.TextScaled = true
+title.Font = Enum.Font.GothamBold
+
+local toggleBtn = Instance.new("TextButton", frame)
+toggleBtn.Size = UDim2.new(1, -10, 0, 40)
+toggleBtn.Position = UDim2.new(0, 5, 0, 40)
+toggleBtn.Text = "Ativar"
+toggleBtn.TextScaled = true
+toggleBtn.Font = Enum.Font.GothamSemibold
+
+toggleBtn.MouseButton1Click:Connect(function()
+    enabled = not enabled
+    toggleBtn.Text = enabled and "Desativar" or "Ativar"
+end)
+
+-- Função auxiliar: encontrar NPC alvo mais próximo dentro do raio
+local function findNearestNPC()
+    local nearest = nil
+    local nearestDist = math.huge
+
+    -- Procura por objetos marcados com a tag NPC_TAG
+    local candidates = CollectionService:GetTagged(NPC_TAG)
+    for _, model in ipairs(candidates) do
+        if model and model.PrimaryPart and model:FindFirstChildOfClass("Humanoid") then
+            local hrp = model.PrimaryPart
+            local dist = (hrp.Position - humanoidRoot.Position).Magnitude
+            if dist < nearestDist and dist <= SEARCH_RADIUS then
+                nearest = model
+                nearestDist = dist
+            end
+        end
+    end
+
+    return nearest, nearestDist
+end
+
+-- Função que "move" o jogador na direção do NPC (simulação; NÃO usa teleporte, apenas ajusta CFrame localmente)
+local function moveTowards(targetPos, dt)
+    -- Simple linear interpolation movement for simulation
+    local direction = (targetPos - humanoidRoot.Position)
+    direction = Vector3.new(direction.X, 0, direction.Z)
+    if direction.Magnitude < 1 then return end
+    local moveDelta = direction.Unit * MOVE_SPEED * dt
+    -- Aplica movimento local (apenas visual durante teste)
+    humanoidRoot.CFrame = humanoidRoot.CFrame + moveDelta
+end
+
+-- Função que "ataca" o NPC (simulação)
+local function performAttack(npcModel)
+    -- Aqui apenas tiramos HP do Humanoid do NPC local (somente para ambiente de teste)
+    local h = npcModel:FindFirstChildOfClass("Humanoid")
+    if h and h.Health > 0 then
+        -- Subtrai uma quantidade fixa por ataque
+        local DAMAGE = 10
+        h.Health = math.max(0, h.Health - DAMAGE)
+        -- Opcional: animação ou efeito simples
+        print(("Atacou %s — HP agora: %d"):format(npcModel.Name, h.Health))
+    end
+end
+
+-- Loop principal (controlado por enabled). RunService.Heartbeat para movimento suave.
+local lastHeartbeat = tick()
+RunService.Heartbeat:Connect(function(dt)
+    -- Atualiza referência do personagem caso respawn
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
+        character = player.Character or player.CharacterAdded:Wait()
+        humanoidRoot = character:WaitForChild("HumanoidRootPart")
+        return
+    end
+
+    if not enabled then return end
+
+    local now = tick()
+    local target, dist = findNearestNPC()
+    if target then
+        -- Move em direção ao alvo
+        moveTowards(target.PrimaryPart.Position, dt)
+
+        -- Verifica intervalo de ataque
+        if now - lastAttack >= ATTACK_INTERVAL then
+            -- Se estiver "próximo o suficiente", executa ataque
+            if dist <= 4.5 then
+                performAttack(target)
+            else
+                -- Se ainda longe, pode "usar" uma habilidade de curto alcance (simulação)
+                -- aqui apenas imprimimos log — em um teste real você chamaria a animação/habilidade local
+                print("Usando habilidade de aproximação (simulada)")
+            end
+            lastAttack = now
+        end
+    else
+        -- Nenhum alvo — ficar parado ou patrulhar (comportamento opcional)
+    end
+end)
+
+-- Atalho de teclado para alternar (tecla H)
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.H then
+        enabled = not enabled
+        toggleBtn.Text = enabled and "Desativar" or "Ativar"
+    end
+end)
+
+-- Mensagem inicial
+print("AutoFarm-Simulado carregado. Use o botão da GUI ou H para ativar/desativar.")
